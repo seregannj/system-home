@@ -6,71 +6,73 @@
     <title>SystemHome — учебная система умного дома</title>
 
     <style>
-        /* Основные настройки страницы */
+        /* Основные настройки */
         body {
             margin: 0;
-            /* Используем стандартный шрифт Arial — он быстрый и надежный */
             font-family: Arial, Helvetica, sans-serif;
             min-height: 100vh;
-            /* Градиент зафиксирован, чтобы не прерывался при скролле */
-            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-            background-attachment: fixed;
+            /* Чистый темный фон без свечений и градиентов */
+            background-color: #14171a; 
             color: #ffffff;
-            line-height: 1.5;
+            line-height: 1.6;
         }
 
         header {
-            padding: 60px 20px;
+            padding: 70px 20px 50px;
             text-align: center;
         }
 
         header h1 {
-            font-size: clamp(32px, 8vw, 48px); /* Адаптивный размер заголовка */
+            font-size: clamp(32px, 8vw, 48px);
             margin: 0;
+            font-weight: bold;
             letter-spacing: 1px;
         }
 
         header p {
             margin-top: 10px;
             font-size: 18px;
-            opacity: 0.8;
+            color: #94a3b8; /* Спокойный сероватый цвет для подзаголовка */
         }
 
         main {
-            max-width: 900px;
-            margin: 0 auto 60px;
+            max-width: 850px;
+            margin: 0 auto 80px;
             padding: 0 20px;
             display: flex;
             flex-direction: column;
-            gap: 25px;
+            gap: 30px;
         }
 
-        /* Эффект стекла (Glassmorphism) */
+        /* Карточки в стиле матового стекла */
         .glass {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
-            /* Тонкая рамка для эффекта объема */
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 35px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
         }
 
         .glass h2 {
             margin-top: 0;
-            font-size: 24px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+            font-size: 26px;
+            margin-bottom: 20px;
+            color: #f8fafc;
         }
 
         .glass p {
-            font-size: 16px;
-            opacity: 0.9;
+            font-size: 17px;
+            color: #cbd5e1;
+            margin-bottom: 15px;
         }
 
-        /* Список навигации */
+        .glass p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Навигация */
         .system {
             display: flex;
             flex-direction: column;
@@ -79,48 +81,44 @@
 
         .system a {
             display: block;
-            padding: 20px;
-            border-radius: 15px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
+            padding: 22px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.03);
+            color: #ffffff;
             text-decoration: none;
-            transition: all 0.3s ease;
-            border: 1px solid transparent;
+            transition: all 0.2s ease;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* Эффект при наведении на кнопки */
         .system a:hover {
-            background: rgba(255, 255, 255, 0.15);
-            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.08);
+            transform: scale(1.01); /* Легкое увеличение вместо прыжка вверх */
             border-color: rgba(255, 255, 255, 0.2);
         }
 
         .system strong {
             display: block;
-            font-size: 18px;
-            margin-bottom: 5px;
+            font-size: 19px;
+            margin-bottom: 6px;
         }
 
         .system span {
-            font-size: 14px;
-            opacity: 0.7;
+            font-size: 15px;
+            color: #94a3b8;
         }
 
         footer {
             text-align: center;
-            padding: 40px 20px;
-            font-size: 13px;
-            opacity: 0.5;
+            padding: 40px;
+            font-size: 14px;
+            color: #64748b;
         }
 
-        /* Небольшая адаптация для совсем маленьких экранов */
-        @media (max-width: 480px) {
-            .glass {
-                padding: 20px;
-            }
-            header {
-                padding: 40px 10px;
-            }
+        /* Адаптация для мобильных устройств */
+        @media (max-width: 600px) {
+            header { padding: 50px 20px 30px; }
+            .glass { padding: 25px; }
+            main { gap: 20px; }
         }
     </style>
 </head>
@@ -136,31 +134,31 @@
     <section class="glass">
         <h2>О проекте</h2>
         <p>
-            SystemHome — образовательный проект, созданный для изучения основ домашней автоматизации. 
-            Здесь наглядно показано, как датчики и исполнительные устройства объединяются в единую сеть.
+            SystemHome — это интерактивная платформа для изучения основ автоматизации. 
+            Проект наглядно демонстрирует, как программный код управляет физическими процессами в современном доме.
         </p>
         <p>
-            <i>Проект носит демонстрационный характер и ориентирован на изучение архитектуры IoT.</i>
+            <i>Создано в образовательных целях для демонстрации работы IoT-систем.</i>
         </p>
     </section>
 
     <section class="glass">
-        <h2>Разделы системы</h2>
+        <h2>Навигация</h2>
 
         <div class="system">
             <a href="model3d.html">
-                <strong>🏠 3D-модель дома</strong>
-                <span>Просмотр планировки и расположения умных датчиков в пространстве.</span>
+                <strong>🏠 3D-модель</strong>
+                <span>Интерактивный план дома с датчиками.</span>
             </a>
 
             <a href="devices.html">
-                <strong>📟 Устройства и код</strong>
-                <span>Технические характеристики модулей и примеры программ для контроллеров.</span>
+                <strong>📟 Устройства</strong>
+                <span>Каталог модулей и исходный код прошивок.</span>
             </a>
 
             <a href="about.html">
-                <strong>⚙️ Логика и архитектура</strong>
-                <span>Подробное описание алгоритмов работы и сценариев автоматизации.</span>
+                <strong>⚙️ Документация</strong>
+                <span>Описание логики и сценариев работы.</span>
             </a>
         </div>
     </section>
