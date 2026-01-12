@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Модель</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        /* Основные настройки */
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            min-height: 100vh;
+            /* Чистый темный фон без свечений и градиентов */
+            background-color: #14171a; 
+            color: #ffffff;
+            line-height: 1.6;
+        }
+
+        header {
+            padding: 70px 20px 50px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: clamp(32px, 8vw, 48px);
+            margin: 0;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        header p {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #94a3b8; /* Спокойный сероватый цвет для подзаголовка */
+        }
+
+        main {
+            max-width: 850px;
+            margin: 0 auto 80px;
+            padding: 0 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        /* Карточки в стиле матового стекла */
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 24px;
+            padding: 35px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Контейнер для модели - БЕЗ PADDING, чтобы модель занимала всю карточку */
+        .model-container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            height: 600px;
+            position: relative;
+            overflow: hidden;
+            /* Убираем padding, чтобы модель занимала всю карточку */
+            padding: 0;
+        }
+
+        /* Модель занимает всю карточку */
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            --progress-bar-color: #0062ff;
+            /* Фон такой же как у карточки */
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 46px;
+            height: 46px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            color: #495057;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            z-index: 100;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        
+        .loader {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 98, 255, 0.1);
+            border-top: 3px solid #0062ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        .loading-progress {
+            width: 300px;
+            height: 6px;
+            background: rgba(0, 98, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #0062ff, #00c6ff);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 3px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; }
+        }
+        
+        /* Адаптация для мобильных устройств */
+        @media (max-width: 600px) {
+            header { padding: 50px 20px 30px; }
+            main { gap: 20px; }
+            .model-container { height: 400px; }
+            .loading-progress { width: 250px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>3D Модель</h1>
+        <p>Интерактивный просмотр 3D модели с возможностью вращения и масштабирования</p>
+    </header>
+
+    <main>
+        <div class="model-container">
+            <div class="loading-overlay" id="loadingOverlay">
+                <div class="loader"></div>
+                <div id="loadingText">Загрузка модели...</div>
+                <div class="loading-progress">
+                    <div class="progress-bar" id="progressBar"></div>
+                </div>
+                <div id="progressText" style="margin-top: 10px; color: #666; font-size: 0.9rem;"></div>
+            </div>
+            
+            <model-viewer
+                id="model-viewer"
+                src="https://dl.dropboxusercontent.com/scl/fi/0193mjqzcky4o021hwkl7/model.glb?rlkey=ipuyv1u83u7fwlvaspf2793qt&st=uwhyeol1&dl=1"
+                alt="3D Модель"
+                camera-controls
+                shadow-intensity="0"
+                exposure="1.2"
+                camera-orbit="0deg 75deg 2.5m"
+                field-of-view="45deg"
+                render-scale="1.5"
+                background-color="rgba(255, 255, 255, 0.05)"
+                style="width: 100%; height: 100%;"
+            >
+            </model-viewer>
+            
+            <button class="fullscreen-btn" id="fullscreenBtn" title="Полноэкранный режим">
+                ⛶
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Элементы DOM
+        const modelViewer = document.getElementById('model-viewer');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingText = document.getElementById('loadingText');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        
+        let isModelLoaded = false;
+        
+        // Обновление прогресса
+        function updateProgress(percent, message) {
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = message;
+        }
+        
+        // Скрытие индикатора загрузки
+        function hideLoading() {
+            loadingOverlay.style.animation = 'fadeOut 0.5s ease';
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+            }, 500);
+        }
+        
+        // Показать ошибку
+        function showError(message) {
+            loadingOverlay.innerHTML = `
+                <div style="text-align: center; padding: 30px; max-width: 500px;">
+                    <div style="color: #ff4444; font-size: 2.5rem; margin-bottom: 15px;">⚠️</div>
+                    <h3 style="color: #333; margin-bottom: 15px;">${message}</h3>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Не удалось загрузить 3D модель. Попробуйте обновить страницу.
+                    </p>
+                    <button onclick="location.reload()" style="
+                        background: #0062ff;
+                        color: white;
+                        border: none;
+                        padding: 12px 25px;
+                        border-radius: 8px;
+                        font-size: 0.95rem;
+                        cursor: pointer;
+                    ">
+                        Обновить страницу
+                    </button>
+                </div>
+            `;
+        }
+        
+        // Обработчики событий модели
+        modelViewer.addEventListener('load', () => {
+            console.log('✅ Модель успешно загружена');
+            isModelLoaded = true;
+            updateProgress(100, 'Загрузка завершена!');
+            
+            setTimeout(() => {
+                hideLoading();
+            }, 1000);
+        });
+        
+        modelViewer.addEventListener('progress', (event) => {
+            const progress = Math.floor(event.detail.totalProgress * 100);
+            updateProgress(progress, `Загрузка: ${progress}%`);
+            
+            if (progress < 30) {
+                loadingText.textContent = 'Загрузка геометрии...';
+            } else if (progress < 70) {
+                loadingText.textContent = 'Загрузка текстур...';
+            } else if (progress < 95) {
+                loadingText.textContent = 'Оптимизация модели...';
+            } else {
+                loadingText.textContent = 'Финальная обработка...';
+            }
+        });
+        
+        modelViewer.addEventListener('error', (event) => {
+            console.error('❌ Ошибка загрузки модели:', event.detail);
+            
+            // Показываем ошибку после 3 секунд ожидания
+            setTimeout(() => {
+                if (!isModelLoaded) {
+                    showError('Не удалось загрузить 3D модель');
+                }
+            }, 3000);
+        });
+        
+        // Полноэкранный режим
+        fullscreenBtn.addEventListener('click', () => {
+            const container = document.querySelector('.model-container');
+            
+            if (!document.fullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                }
+                fullscreenBtn.title = 'Выйти из полноэкранного режима';
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+                fullscreenBtn.title = 'Полноэкранный режим';
+            }
+        });
+        
+        // Слушатель изменения полноэкранного режима
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                fullscreenBtn.innerHTML = '⛶';
+            } else {
+                fullscreenBtn.innerHTML = '⛶';
+            }
+        });
+        
+        // Горячие клавиши
+        document.addEventListener('keydown', (e) => {
+            // F - полноэкранный режим
+            if (e.key === 'f' || e.key === 'F') {
+                e.preventDefault();
+                fullscreenBtn.click();
+            }
+            
+            // ESC - выход из полноэкранного режима
+            if (e.key === 'Escape' && document.fullscreenElement) {
+                document.exitFullscreen();
+            }
+            
+            // R - сброс камеры
+            if (e.key === 'r' || e.key === 'R') {
+                modelViewer.cameraOrbit = '0deg 75deg 2.5m';
+                modelViewer.jumpCameraToGoal();
+            }
+        });
+        
+        // Настройка адаптивности
+        function adaptLayout() {
+            const container = document.querySelector('.model-container');
+            const isMobile = window.innerWidth < 600;
+            
+            if (isMobile) {
+                container.style.height = '400px';
+            } else {
+                container.style.height = '600px';
+            }
+        }
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            adaptLayout();
+            window.addEventListener('resize', adaptLayout);
+            
+            // Показываем загрузку
+            loadingText.textContent = 'Загрузка модели...';
+            updateProgress(10, 'Подготовка...');
+        });
+    </script>
+</body>
+</html>
