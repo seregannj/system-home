@@ -1,0 +1,167 @@
+from flask import Flask, render_template, jsonify, request
+import sqlite3
+import json
+import os
+from datetime import datetime
+
+app = Flask(__name__)
+DATABASE = 'devices.db'
+DEVICES_CONFIG_DIR = 'devices_config'
+
+# Создаем необходимые директории
+os.makedirs(DEVICES_CONFIG_DIR, exist_ok=True)
+
+def init_db():
+    """Инициализация базы данных"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS devices (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT DEFAULT 'offline',
+            last_seen TIMESTAMP,
+            config_file TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_device_config(device_id, config):
+    """Сохранение конфигурации устройства в JSON"""
+    config_file = os.path.join(DEVICES_CONFIG_DIR, f"{device_id}.json")
+    with open(config_file, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+    return config_file
+
+@app.route('/')
+def index():
+    """Главная страница с веб-интерфейсом"""
+    return render_template('index.html')
+
+@app.route('/devices')
+def get_devices():
+    """Получить список всех устройств с их конфигурациями"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    # Получаем все устройства
+    cursor.execute('SELECT id, name, type, status, config_file FROM devices')
+    devices_data = cursor.fetchall()
+    
+    devices = []
+    for device in devices_data:
+        device_id, name, type_, status, config_file = device
+        
+        # Загружаем конфигурацию из JSON
+        config = {}
+        if config_file and os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        
+        devices.append({
+            'id': device_id,
+            'name': name,
+            'type': type_,
+            'status': status,
+            'config': config
+        })
+    
+    conn.close()
+    return jsonify(devices)
+
+@app.route('/register', methods=['POST'])
+def register_device():
+    """Регистрация нового устройства"""
+    data = request.json
+    
+    if not data or 'id' not in data:
+        return jsonify({'error': 'No device ID provided'}), 400
+    
+    device_id = data['id']
+    name = data.get('name', f'Устройство {device_id}')
+    device_type = data.get('type', 'unknown')
+    
+    # Сохраняем конфигурацию
+    config = {
+        'id': device_id,
+        'name': name,
+        'type': device_type,
+        'icon': data.get('icon', '💡'),
+        'description': data.get('description', 'Устройство умного дома'),
+        'commands': data.get('commands', ['on', 'off']),
+        'status_options': data.get('status_options', ['on', 'off'])
+    }
+    
+    config_file = save_device_config(device_id, config)
+    
+    # Сохраняем в базу данных
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT OR REPLACE INTO devices (id, name, type, status, last_seen, config_file)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (device_id, name, device_type, 'online', datetime.now(), config_file))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'message': f'Устройство {name} зарегистрировано'})
+
+@app.route('/command//')
+def send_command(device_id, command):
+    """Отправка команды устройству"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    # Получаем информацию об устройстве
+    cursor.execute('SELECT name, config_file FROM devices WHERE id = ?', (device_id,))
+    device = cursor.fetchone()
+    
+    if not device:
+        return jsonify({'error': 'Устройство не найдено'}), 404
+    
+    device_name, config_file = device
+    
+    # Обновляем статус устройства
+    new_status = command if command in ['online', 'offline'] else 'online'
+    cursor.execute(
+        'UPDATE devices SET status = ?, last_seen = ? WHERE id = ?',
+        (new_status, datetime.now(), device_id)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    # В реальной системе здесь был бы вызов API устройства
+    # Для демо просто возвращаем успех
+    return jsonify({
+        'success': True,
+        'message': f'Команда "{command}" отправлена устройству "{device_name}"',
+        'device_id': device_id,
+        'command': command
+    })
+
+@app.route('/update_status//')
+def update_status(device_id, status):
+    """Обновление статуса устройства (имитация ответа от устройства)"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        'UPDATE devices SET status = ?, last_seen = ? WHERE id = ?',
+        (status, datetime.now(), device_id)
+    )
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+if __name__ == '__main__':
+    init_db()
+    print("Сервер запускается на http://127.0.0.1:5000")
+    print("Добавьте тестовые устройства через POST запрос на /register")
+    app.run(debug=True, host='0.0.0.0', port=5000)
