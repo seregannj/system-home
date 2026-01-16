@@ -1,0 +1,523 @@
+#!/bin/bash
+# install_assistant.sh
+# Установка ИИ-помощника на Raspberry Pi
+
+echo "=== Установка SystemHome Voice Assistant ==="
+
+# 1. Обновление системы
+echo "1. Обновление системы..."
+sudo apt update && sudo apt upgrade -y
+
+# 2. Установка базовых пакетов
+echo "2. Установка базовых пакетов..."
+sudo apt install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    portaudio19-dev \
+    python3-pyaudio \
+    espeak \
+    mpg321 \
+    git \
+    flac \
+    libatlas-base-dev \
+    libhdf5-dev \
+    libopenblas-dev
+
+# 3. Создание виртуального окружения
+echo "3. Создание виртуального окружения..."
+python3 -m venv ~/assistant_env
+source ~/assistant_env/bin/activate
+
+# 4. Установка Python пакетов
+echo "4. Установка Python пакетов..."
+pip install --upgrade pip
+pip install wheel setuptools
+
+pip install \
+    openai \
+    speechrecognition \
+    pyttsx3 \
+    requests \
+    pyaudio \
+    flask \
+    python-dotenv \
+    numpy==1.21.4 \
+    scipy==1.7.3
+
+# 5. Создание директории проекта
+echo "5. Создание проекта..."
+mkdir -p ~/systemhome_assistant
+cd ~/systemhome_assistant
+
+# 6. Создание файлов
+echo "6. Создание конфигурационных файлов..."
+
+# Основной файл
+cat > assistant.py << 'EOF'
+# Вставьте сюда код assistant.py из предыдущего раздела
+EOF
+
+# Файл окружения
+cat > .env << EOF
+# OpenAI API Key (получите на platform.openai.com)
+OPENAI_API_KEY=sk-ваш-api-ключ
+
+# Настройки сервера умного дома
+SERVER_IP=192.168.1.100
+SERVER_PORT=5000
+
+# Настройки помощника
+DEVICE_ID=ai_assistant_001
+DEVICE_NAME="ИИ Помощник"
+LANGUAGE=ru-RU
+EOF
+
+# Веб-интерфейс
+mkdir -p templates
+
+cat > templates/assistant_web.html << 'EOF'
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ИИ Помощник - SystemHome</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, #1a2980, #26d0ce);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            text-align: center;
+            padding: 30px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+        }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            background: #4CAF50;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .status-badge.offline { background: #f44336; }
+        .panels {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .panel {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+        .voice-control {
+            text-align: center;
+        }
+        .mic-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: 3px solid white;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            margin: 20px auto;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .mic-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.05); }
+        .mic-btn.active { background: #ff4081; animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255,64,129,0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(255,64,129,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,64,129,0); }
+        }
+        textarea, input {
+            width: 100%;
+            padding: 15px;
+            border-radius: 10px;
+            border: none;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 1rem;
+            margin: 10px 0;
+            resize: vertical;
+        }
+        button {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+            margin: 5px;
+        }
+        button:hover { background: rgba(255,255,255,0.3); }
+        .response {
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            min-height: 80px;
+        }
+        .device-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .device-item {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .device-status { 
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .online { background: #4CAF50; box-shadow: 0 0 10px #4CAF50; }
+        .offline { background: #f44336; }
+        .logs {
+            font-family: monospace;
+            background: rgba(0,0,0,0.5);
+            padding: 15px;
+            border-radius: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            .panels { grid-template-columns: 1fr; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 ИИ Помощник SystemHome</h1>
+            <p>Голосовое управление умным домом с OpenAI GPT</p>
+            <div id="status" class="status-badge">Загрузка...</div>
+        </header>
+        
+        <div class="panels">
+            <!-- Панель голосового управления -->
+            <div class="panel voice-control">
+                <h2>🎤 Голосовое управление</h2>
+                <p>Скажите ключевое слово: "ассистент", "помощник" или "эй"</p>
+                
+                <div id="micBtn" class="mic-btn">
+                    🎤
+                </div>
+                
+                <p>Или введите команду вручную:</p>
+                <textarea id="commandInput" placeholder="Например: Включи свет в гостиной..." rows="3"></textarea>
+                <button onclick="sendCommand()">📨 Отправить</button>
+            </div>
+            
+            <!-- Панель устройств -->
+            <div class="panel">
+                <h2>🏠 Устройства</h2>
+                <div class="device-list" id="deviceList">
+                    Загрузка...
+                </div>
+                <button onclick="loadDevices()" style="margin-top: 15px;">🔄 Обновить</button>
+            </div>
+        </div>
+        
+        <!-- Ответ помощника -->
+        <div class="panel">
+            <h2>💬 Ответ помощника</h2>
+            <div class="response" id="response">
+                Жду вашу команду...
+            </div>
+        </div>
+        
+        <!-- Быстрые команды -->
+        <div class="panel">
+            <h2>⚡ Быстрые команды</h2>
+            <div>
+                <button onclick="quickCommand('Какие устройства подключены?')">📱 Список устройств</button>
+                <button onclick="quickCommand('Включи свет')">💡 Вкл свет</button>
+                <button onclick="quickCommand('Выключи розетку')">🔌 Выкл розетку</button>
+                <button onclick="quickCommand('Какая погода?')">🌤️ Погода</button>
+                <button onclick="quickCommand('Который час?')">⏰ Время</button>
+            </div>
+        </div>
+        
+        <!-- Логи -->
+        <div class="panel">
+            <h2>📝 Логи</h2>
+            <div class="logs" id="logs">
+                Инициализация...
+            </div>
+            <button onclick="clearLogs()" style="margin-top: 10px;">🧹 Очистить логи</button>
+        </div>
+    </div>
+    
+    <script>
+        let isListening = false;
+        
+        // Элементы DOM
+        const statusEl = document.getElementById('status');
+        const micBtn = document.getElementById('micBtn');
+        const commandInput = document.getElementById('commandInput');
+        const responseEl = document.getElementById('response');
+        const deviceListEl = document.getElementById('deviceList');
+        const logsEl = document.getElementById('logs');
+        
+        // Обновление статуса
+        async function updateStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                
+                statusEl.textContent = data.status === 'online' ? '🟢 Онлайн' : '🔴 Офлайн';
+                statusEl.className = `status-badge ${data.status === 'online' ? '' : 'offline'}`;
+                
+                addLog(`Статус: ${data.status}`);
+            } catch (error) {
+                statusEl.textContent = '🔴 Ошибка связи';
+                statusEl.className = 'status-badge offline';
+                addLog('Ошибка обновления статуса');
+            }
+        }
+        
+        // Загрузка устройств
+        async function loadDevices() {
+            try {
+                const res = await fetch('/api/devices');
+                const devices = await res.json();
+                
+                if (devices.length === 0) {
+                    deviceListEl.innerHTML = '<p>Нет устройств</p>';
+                    return;
+                }
+                
+                let html = '';
+                devices.forEach(device => {
+                    const isOnline = device.status === 'online';
+                    html += `
+                        <div class="device-item">
+                            <div style="display: flex; align-items: center;">
+                                <div class="device-status ${isOnline ? 'online' : 'offline'}"></div>
+                                <div>
+                                    <strong>${device.name}</strong><br>
+                                    <small>${device.type} • ${device.id}</small>
+                                </div>
+                            </div>
+                            <div>
+                                <button onclick="controlDevice('${device.id}', 'on')" ${!isOnline ? 'disabled' : ''}>⚡</button>
+                                <button onclick="controlDevice('${device.id}', 'off')" ${!isOnline ? 'disabled' : ''}>⭕</button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                deviceListEl.innerHTML = html;
+                addLog(`Загружено ${devices.length} устройств`);
+            } catch (error) {
+                deviceListEl.innerHTML = '<p>Ошибка загрузки</p>';
+                addLog('Ошибка загрузки устройств');
+            }
+        }
+        
+        // Управление устройством
+        async function controlDevice(deviceId, command) {
+            try {
+                const res = await fetch('/api/control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({device_id: deviceId, command: command})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    addLog(`Устройство ${deviceId}: команда ${command}`);
+                    setTimeout(loadDevices, 1000);
+                }
+            } catch (error) {
+                addLog('Ошибка управления устройством');
+            }
+        }
+        
+        // Отправка команды
+        async function sendCommand() {
+            const command = commandInput.value.trim();
+            if (!command) return;
+            
+            commandInput.value = '';
+            responseEl.innerHTML = `<em>Обработка: "${command}"...</em>`;
+            addLog(`Команда: ${command}`);
+            
+            try {
+                const res = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({command: command})
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    responseEl.innerHTML = `
+                        <strong>Вы:</strong> ${command}<br><br>
+                        <strong>Помощник:</strong> ${data.response}
+                    `;
+                    addLog(`Ответ: ${data.response.substring(0, 50)}...`);
+                }
+            } catch (error) {
+                responseEl.innerHTML = '<span style="color: #ff9999;">Ошибка связи с помощником</span>';
+                addLog('Ошибка отправки команды');
+            }
+        }
+        
+        // Быстрая команда
+        function quickCommand(command) {
+            commandInput.value = command;
+            sendCommand();
+        }
+        
+        // Голосовое управление
+        micBtn.addEventListener('click', async () => {
+            if (!isListening) {
+                isListening = true;
+                micBtn.classList.add('active');
+                micBtn.innerHTML = '🎤...';
+                
+                // Имитация прослушивания
+                setTimeout(async () => {
+                    const commands = [
+                        'Включи свет в гостиной',
+                        'Какие устройства подключены',
+                        'Какая сегодня погода',
+                        'Выключи все розетки'
+                    ];
+                    const randomCommand = commands[Math.floor(Math.random() * commands.length)];
+                    
+                    commandInput.value = randomCommand;
+                    await sendCommand();
+                    
+                    isListening = false;
+                    micBtn.classList.remove('active');
+                    micBtn.innerHTML = '🎤';
+                }, 2000);
+            }
+        });
+        
+        // Логирование
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString();
+            logsEl.innerHTML += `[${time}] ${message}\n`;
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+        
+        function clearLogs() {
+            logsEl.innerHTML = '';
+        }
+        
+        // Инициализация
+        updateStatus();
+        loadDevices();
+        setInterval(updateStatus, 10000);
+        setInterval(loadDevices, 30000);
+        
+        // Отправка по Enter
+        commandInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendCommand();
+            }
+        });
+        
+        addLog('Веб-интерфейс запущен');
+    </script>
+</body>
+</html>
+EOF
+
+# 7. Создание сервиса для автозапуска
+echo "7. Настройка автозапуска..."
+
+cat > systemhome-assistant.service << EOF
+[Unit]
+Description=SystemHome AI Voice Assistant
+After=network.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=/home/$USER/systemhome_assistant
+Environment="PATH=/home/$USER/assistant_env/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="DISPLAY=:0"
+ExecStart=/home/$USER/assistant_env/bin/python3 assistant.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo mv systemhome-assistant.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable systemhome-assistant.service
+
+# 8. Настройка аудио
+echo "8. Настройка аудиосистемы..."
+sudo usermod -a -G audio $USER
+sudo usermod -a -G pulse $USER
+sudo usermod -a -G pulse-access $USER
+
+# 9. Проверка микрофона
+echo "9. Проверка аудиоустройств..."
+echo "Микрофоны:"
+arecord -l 2>/dev/null || echo "  arecord не найден"
+echo ""
+echo "Динамики:"
+aplay -l 2>/dev/null || echo "  aplay не найден"
+
+# 10. Запуск сервиса
+echo "10. Запуск помощника..."
+sudo systemctl start systemhome-assistant.service
+sleep 3
+sudo systemctl status systemhome-assistant.service
+
+echo ""
+echo "=== УСТАНОВКА ЗАВЕРШЕНА! ==="
+echo ""
+echo "Информация:"
+echo "  Веб-интерфейс: http://$(hostname -I | awk '{print $1}'):8080"
+echo "  Ключевые слова: ассистент, помощник, эй"
+echo "  Логи: journalctl -u systemhome-assistant.service -f"
+echo ""
+echo "Обязательно отредактируйте файл ~/systemhome_assistant/.env"
+echo "и установите ваш OpenAI API ключ!"
+echo ""
