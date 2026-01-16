@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SystemHome - Устройства</title>
+    <style>
+        body {
+            margin: 0;
+            background: #0f172a;
+            color: white;
+            font-family: system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .device-card {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .device-card:hover {
+            transform: translateY(-2px);
+            border-color: #3b82f6;
+        }
+
+        .device-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .device-icon {
+            font-size: 32px;
+        }
+
+        .device-status {
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .online {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+        }
+
+        .offline {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+        }
+
+        .device-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+        }
+
+        .device-type {
+            color: #94a3b8;
+            font-size: 14px;
+            margin: 0 0 12px 0;
+        }
+
+        .device-commands {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 15px 0;
+        }
+
+        .btn-command {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            flex: 1;
+            min-width: 70px;
+        }
+
+        .btn-command:hover:not(:disabled) {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-command:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .device-id {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            grid-column: 1 / -1;
+            color: #94a3b8;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 60px;
+            grid-column: 1 / -1;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .devices-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="devices-container" class="devices-grid">
+            <div class="loading">
+                Загрузка устройств...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadDevices() {
+            try {
+                const response = await fetch('/devices');
+                const devices = await response.json();
+                renderDevices(devices);
+            } catch (error) {
+                document.getElementById('devices-container').innerHTML = `
+                    <div class="empty">
+                        <div class="empty-icon">⚠️</div>
+                        <div>Ошибка загрузки</div>
+                    </div>
+                `;
+            }
+        }
+
+        function renderDevices(devices) {
+            const container = document.getElementById('devices-container');
+            
+            if (devices.length === 0) {
+                container.innerHTML = `
+                    <div class="empty">
+                        <div class="empty-icon">🏠</div>
+                        <div>Нет устройств</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = devices.map(device => `
+                <div class="device-card">
+                    <div class="device-header">
+                        <span class="device-icon">${device.config?.icon || '💡'}</span>
+                        <span class="device-status ${device.status}">
+                            ${device.status === 'online' ? 'Онлайн' : 'Офлайн'}
+                        </span>
+                    </div>
+                    
+                    <div class="device-name">${device.name}</div>
+                    <div class="device-type">${getTypeName(device.type)}</div>
+                    
+                    <div class="device-commands">
+                        ${renderCommands(device)}
+                    </div>
+                    
+                    <div class="device-id">${device.id}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderCommands(device) {
+            const commands = device.config?.commands || ['on', 'off'];
+            return commands.map(cmd => `
+                <button class="btn-command" 
+                        onclick="sendCommand('${device.id}', '${cmd}')"
+                        ${device.status !== 'online' ? 'disabled' : ''}>
+                    ${getCommandName(cmd)}
+                </button>
+            `).join('');
+        }
+
+        function getTypeName(type) {
+            const types = {
+                'light': 'Лампа',
+                'sensor': 'Датчик',
+                'switch': 'Выключатель',
+                'thermostat': 'Термостат'
+            };
+            return types[type] || 'Устройство';
+        }
+
+        function getCommandName(cmd) {
+            const names = {
+                'on': 'Вкл',
+                'off': 'Выкл',
+                'toggle': 'Перекл',
+                'read': 'Прочитать'
+            };
+            return names[cmd] || cmd;
+        }
+
+        async function sendCommand(deviceId, command) {
+            try {
+                await fetch(`/command/${deviceId}/${command}`);
+                setTimeout(loadDevices, 300);
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+
+        // Загрузить сразу и обновлять каждые 5 секунд
+        loadDevices();
+        setInterval(loadDevices, 5000);
+    </script>
+</body>
+</html>
