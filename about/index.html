@@ -1,1 +1,194 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SystemHome — Документация</title>
 
+<style>
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #14171a;
+    color: #ffffff;
+}
+
+header {
+    text-align: center;
+    padding: 60px 20px 40px;
+}
+
+header h1 {
+    font-size: 40px;
+    margin-bottom: 10px;
+}
+
+header p {
+    color: #94a3b8;
+    font-size: 18px;
+}
+
+main {
+    max-width: 1000px;
+    margin: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.glass {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(12px);
+    border-radius: 24px;
+    padding: 35px;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+.glass h2 {
+    margin-top: 0;
+    font-size: 26px;
+}
+
+.glass p {
+    color: #cbd5e1;
+    font-size: 16px;
+}
+
+.flow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.step {
+    padding: 20px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.04);
+    text-align: center;
+    animation: fadeUp 0.6s ease forwards;
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-align: left;
+}
+
+th {
+    color: #f8fafc;
+}
+
+td {
+    color: #cbd5e1;
+}
+
+footer {
+    text-align: center;
+    padding: 40px;
+    color: #64748b;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>Документация SystemHome</h1>
+    <p>Принцип работы системы умного дома</p>
+</header>
+
+<main>
+
+<section class="glass">
+<h2>Общее описание</h2>
+<p>
+SystemHome — это учебная модель умного дома, демонстрирующая взаимодействие
+программного кода, контроллеров и физических устройств.
+Система построена по модульному принципу и может легко расширяться.
+</p>
+</section>
+
+<section class="glass">
+<h2>Как работает система</h2>
+
+<div class="flow">
+<div class="step">📱 Пользователь<br>отправляет команду</div>
+<div class="step">🌐 Веб-интерфейс<br>обрабатывает запрос</div>
+<div class="step">🧠 Контроллер<br>выполняет логику</div>
+<div class="step">💡 Устройство<br>реагирует</div>
+</div>
+
+</section>
+
+<section class="glass">
+<h2>Архитектура умного дома</h2>
+<p>
+Система использует централизованную архитектуру управления, где веб-интерфейс
+служит точкой взаимодействия пользователя с устройствами.
+</p>
+<ul>
+<li>Веб-сайт — управление и визуализация</li>
+<li>Контроллер (ESP / Arduino) — логика</li>
+<li>Исполнительные устройства — лампы, датчики</li>
+</ul>
+</section>
+
+<section class="glass">
+<h2>Основные компоненты</h2>
+
+<table>
+<tr>
+<th>Компонент</th>
+<th>Назначение</th>
+</tr>
+<tr>
+<td>Контроллер</td>
+<td>Обработка команд и управление устройствами</td>
+</tr>
+<tr>
+<td>Датчики</td>
+<td>Сбор информации о среде</td>
+</tr>
+<tr>
+<td>Исполнители</td>
+<td>Физическое выполнение команд</td>
+</tr>
+<tr>
+<td>Веб-интерфейс</td>
+<td>Управление и мониторинг</td>
+</tr>
+</table>
+
+</section>
+
+<section class="glass">
+<h2>Преимущества проекта</h2>
+<ul>
+<li>Наглядность и простота</li>
+<li>Масштабируемость</li>
+<li>Подходит для обучения IoT</li>
+<li>Безопасная симуляция</li>
+</ul>
+</section>
+
+</main>
+
+<footer>
+SystemHome • Документация проекта
+</footer>
+
+</body>
+</html>
