@@ -1,0 +1,394 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266HTTPClient.h>
+#include <ESP8266WebServer.h>
+
+// ========== НАСТРОЙКИ ==========
+const char* MAIN_WIFI_SSID = "ВАШ_ОСНОВНОЙ_WIFI";
+const char* MAIN_WIFI_PASS = "ВАШ_ПАРОЛЬ";
+
+const char* HUB_WIFI_SSID = "SmartHome_Hub";    // Имя точки доступа хаба
+const char* HUB_WIFI_PASS = "homehub123";       // Пароль точки доступа
+
+const char* SERVER_IP = "192.168.1.100";        // IP центрального сервера
+const int SERVER_PORT = 5000;
+
+const char* HUB_ID = "wifi_hub_001";
+const char* HUB_NAME = "Wi-Fi Хаб";
+const char* HUB_TYPE = "hub";
+
+const int STATUS_LED = D4;          // GPIO2 для светодиода статуса
+const int BUTTON_PIN = D3;          // GPIO0 для кнопки сброса
+
+// Диапазон IP для раздачи устройствам
+IPAddress local_IP(192, 168, 4, 1);
+IPAddress gateway(192, 168, 4, 1);
+IPAddress subnet(255, 255, 255, 0);
+// ===============================
+
+ESP8266WebServer webServer(80);
+WiFiClient client;
+HTTPClient http;
+
+bool hubMode = true;                // true = режим хаба, false = клиент
+unsigned long lastStatusUpdate = 0;
+const unsigned long STATUS_INTERVAL = 5000;
+int connectedDevices = 0;
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("\n\n===== SMART HOME Wi-Fi HUB =====");
+  
+  // Настройка пинов
+  pinMode(STATUS_LED, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  digitalWrite(STATUS_LED, HIGH);
+  
+  // Быстрая проверка кнопки при старте
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    Serial.println("Кнопка нажата - сброс настроек");
+    factoryReset();
+  }
+  
+  // Попытка подключиться к основной сети
+  if (connectToMainWiFi()) {
+    Serial.println("Подключен к основной сети Wi-Fi");
+    hubMode = false;  // Работаем как клиент
+    registerHub();
+  } else {
+    Serial.println("Не удалось подключиться к основной сети");
+    Serial.println("Запуск в режиме Wi-Fi Хаба...");
+    startWiFiHub();
+    hubMode = true;
+  }
+  
+  // Настройка веб-сервера для управления
+  setupWebServer();
+  
+  Serial.println("Хаб инициализирован");
+  Serial.println("===============================\n");
+}
+
+void loop() {
+  // Обслуживание веб-сервера
+  webServer.handleClient();
+  
+  // Проверка кнопки
+  checkButton();
+  
+  // Обновление статуса на центральном сервере
+  if (!hubMode && millis() - lastStatusUpdate > STATUS_INTERVAL) {
+    updateHubStatus();
+    lastStatusUpdate = millis();
+  }
+  
+  // В режиме хаба сканируем подключенные устройства
+  if (hubMode) {
+    updateConnectedDevices();
+  }
+  
+  // Мигание светодиодом в зависимости от режима
+  updateStatusLED();
+  
+  delay(10);
+}
+
+bool connectToMainWiFi() {
+  Serial.print("Подключение к основной сети: ");
+  Serial.println(MAIN_WIFI_SSID);
+  
+  WiFi.begin(MAIN_WIFI_SSID, MAIN_WIFI_PASS);
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    digitalWrite(STATUS_LED, !digitalRead(STATUS_LED));
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nУспешно!");
+    Serial.print("IP адрес: ");
+    Serial.println(WiFi.localIP());
+    digitalWrite(STATUS_LED, HIGH);
+    return true;
+  }
+  
+  Serial.println("\nНе удалось подключиться");
+  digitalWrite(STATUS_LED, LOW);
+  return false;
+}
+
+void startWiFiHub() {
+  Serial.println("Создание точки доступа Wi-Fi...");
+  
+  // Настройка точки доступа
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(local_IP, gateway, subnet);
+  
+  if (WiFi.softAP(HUB_WIFI_SSID, HUB_WIFI_PASS)) {
+    Serial.println("Точка доступа создана!");
+    Serial.print("SSID: ");
+    Serial.println(HUB_WIFI_SSID);
+    Serial.print("IP адрес хаба: ");
+    Serial.println(WiFi.softAPIP());
+    Serial.print("Пароль: ");
+    Serial.println(HUB_WIFI_PASS);
+    
+    // Регистрируем хаб в режиме AP
+    registerHub();
+  } else {
+    Serial.println("Ошибка создания точки доступа!");
+  }
+}
+
+void registerHub() {
+  Serial.println("Регистрация хаба на сервере...");
+  
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/register";
+  
+  http.begin(client, serverURL);
+  http.addHeader("Content-Type", "application/json");
+  
+  // JSON данные для регистрации
+  String jsonData = "{";
+  jsonData += "\"id\":\"" + String(HUB_ID) + "\",";
+  jsonData += "\"name\":\"" + String(HUB_NAME) + "\",";
+  jsonData += "\"type\":\"" + String(HUB_TYPE) + "\",";
+  jsonData += "\"icon\":\"📡\",";
+  jsonData += "\"description\":\"Wi-Fi Хаб для умного дома\",";
+  jsonData += "\"commands\":[\"scan\",\"restart\",\"mode\"],";
+  jsonData += "\"status\":\"" + String(hubMode ? "hub" : "client") + "\"";
+  jsonData += "}";
+  
+  int httpCode = http.POST(jsonData);
+  
+  if (httpCode > 0) {
+    Serial.print("Код ответа сервера: ");
+    Serial.println(httpCode);
+    
+    if (httpCode == HTTP_CODE_OK) {
+      Serial.println("Хаб зарегистрирован на сервере!");
+      sendStatus(hubMode ? "hub" : "client");
+    }
+  } else {
+    Serial.print("Ошибка регистрации: ");
+    Serial.println(http.errorToString(httpCode).c_str());
+  }
+  
+  http.end();
+}
+
+void updateHubStatus() {
+  // Отправляем текущий статус хаба
+  String status = String(hubMode ? "hub" : "client") + "_devices:" + String(connectedDevices);
+  sendStatus(status);
+}
+
+void sendStatus(String status) {
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/update_status/" + String(HUB_ID) + "/" + status;
+  
+  http.begin(client, serverURL);
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+    Serial.println("Статус отправлен: " + status);
+  }
+  
+  http.end();
+}
+
+void checkButton() {
+  static unsigned long lastPress = 0;
+  
+  if (digitalRead(BUTTON_PIN) == LOW && millis() - lastPress > 1000) {
+    Serial.println("Длительное нажатие кнопки - переключение режима");
+    lastPress = millis();
+    
+    if (hubMode) {
+      // Пытаемся переключиться в режим клиента
+      if (connectToMainWiFi()) {
+        hubMode = false;
+        registerHub();
+        Serial.println("Переключен в режим клиента");
+      }
+    } else {
+      // Переключаемся в режим хаба
+      WiFi.disconnect();
+      delay(1000);
+      startWiFiHub();
+      hubMode = true;
+      Serial.println("Переключен в режим хаба");
+    }
+  }
+}
+
+void updateConnectedDevices() {
+  // Получаем количество подключенных устройств к точке доступа
+  int newCount = WiFi.softAPgetStationNum();
+  
+  if (newCount != connectedDevices) {
+    connectedDevices = newCount;
+    Serial.print("Подключенные устройства: ");
+    Serial.println(connectedDevices);
+    
+    // Отправляем обновление статуса
+    sendStatus("hub_devices:" + String(connectedDevices));
+  }
+}
+
+void updateStatusLED() {
+  static unsigned long lastBlink = 0;
+  
+  if (hubMode) {
+    // В режиме хаба: медленное мигание
+    if (millis() - lastBlink > (connectedDevices > 0 ? 2000 : 1000)) {
+      digitalWrite(STATUS_LED, !digitalRead(STATUS_LED));
+      lastBlink = millis();
+    }
+  } else {
+    // В режиме клиента: быстрое мигание при проблемах, постоянно при OK
+    if (WiFi.status() != WL_CONNECTED) {
+      if (millis() - lastBlink > 200) {
+        digitalWrite(STATUS_LED, !digitalRead(STATUS_LED));
+        lastBlink = millis();
+      }
+    } else {
+      digitalWrite(STATUS_LED, LOW);  // Постоянно горит при подключении
+    }
+  }
+}
+
+void setupWebServer() {
+  // Веб-интерфейс для управления хабом
+  webServer.on("/", HTTP_GET, []() {
+    String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>";
+    html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+    html += "<title>SmartHome Hub</title><style>";
+    html += "body{font-family:Arial,sans-serif;margin:20px;background:#f0f0f0;}";
+    html += ".card{background:white;padding:20px;border-radius:10px;margin:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}";
+    html += ".hub{background:#4CAF50;color:white;}";
+    html += ".client{background:#2196F3;color:white;}";
+    html += "button{padding:10px 20px;margin:5px;border:none;border-radius:5px;cursor:pointer;}";
+    html += "</style></head><body>";
+    html += "<div class='card " + String(hubMode ? "hub" : "client") + "'>";
+    html += "<h1>SmartHome Wi-Fi Хаб</h1>";
+    html += "<p><strong>Режим:</strong> " + String(hubMode ? "Wi-Fi Хаб (Точка доступа)" : "Wi-Fi Клиент") + "</p>";
+    html += "<p><strong>ID:</strong> " + String(HUB_ID) + "</p>";
+    
+    if (hubMode) {
+      html += "<p><strong>SSID:</strong> " + String(HUB_WIFI_SSID) + "</p>";
+      html += "<p><strong>Подключенные устройства:</strong> " + String(connectedDevices) + "</p>";
+      html += "<p><strong>IP хаба:</strong> " + WiFi.softAPIP().toString() + "</p>";
+    } else {
+      html += "<p><strong>Подключен к:</strong> " + String(MAIN_WIFI_SSID) + "</p>";
+      html += "<p><strong>IP адрес:</strong> " + WiFi.localIP().toString() + "</p>";
+      html += "<p><strong>Сигнал:</strong> " + String(WiFi.RSSI()) + " dBm</p>";
+    }
+    
+    html += "</div>";
+    
+    html += "<div class='card'>";
+    html += "<h2>Управление</h2>";
+    html += "<button onclick=\"location.href='/scan'\">Сканировать сети</button>";
+    html += "<button onclick=\"location.href='/switch'\">Переключить режим</button>";
+    html += "<button onclick=\"location.href='/restart'\">Перезагрузить</button>";
+    html += "<button onclick=\"location.href='/status'\">Статус</button>";
+    html += "</div>";
+    
+    html += "</body></html>";
+    webServer.send(200, "text/html", html);
+  });
+  
+  webServer.on("/scan", HTTP_GET, []() {
+    String html = "<html><body><h1>Доступные Wi-Fi сети:</h1><ul>";
+    
+    int n = WiFi.scanNetworks();
+    for (int i = 0; i < n; i++) {
+      html += "<li>" + WiFi.SSID(i) + " (Сигнал: " + WiFi.RSSI(i) + " dBm)</li>";
+    }
+    
+    html += "</ul><br><a href='/'>Назад</a></body></html>";
+    webServer.send(200, "text/html", html);
+  });
+  
+  webServer.on("/switch", HTTP_GET, []() {
+    String html = "<html><body><h1>Переключение режима...</h1>";
+    html += "<p>Хаб перезагрузится через 3 секунды</p>";
+    html += "<script>setTimeout(() => location.href='/', 3000)</script>";
+    html += "</body></html>";
+    
+    webServer.send(200, "text/html", html);
+    
+    // Переключаем режим
+    if (hubMode) {
+      hubMode = false;
+    } else {
+      hubMode = true;
+    }
+    
+    delay(1000);
+    ESP.restart();
+  });
+  
+  webServer.on("/restart", HTTP_GET, []() {
+    webServer.send(200, "text/plain", "Перезагрузка...");
+    delay(1000);
+    ESP.restart();
+  });
+  
+  webServer.on("/status", HTTP_GET, []() {
+    String json = "{";
+    json += "\"mode\":\"" + String(hubMode ? "hub" : "client") + "\",";
+    json += "\"devices\":\"" + String(connectedDevices) + "\",";
+    json += "\"ip\":\"" + (hubMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString()) + "\",";
+    json += "\"rssi\":\"" + String(WiFi.RSSI()) + "\"";
+    json += "}";
+    
+    webServer.send(200, "application/json", json);
+  });
+  
+  webServer.begin();
+  Serial.println("Веб-сервер запущен на порту 80");
+}
+
+void factoryReset() {
+  Serial.println("Сброс настроек к заводским...");
+  // Здесь можно очистить EEPROM если храните настройки
+  delay(2000);
+}
+
+// Обработка команд с центрального сервера
+void checkServerCommands() {
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/command/" + String(HUB_ID) + "/check";
+  
+  http.begin(client, serverURL);
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String command = http.getString();
+    command.trim();
+    
+    if (command == "scan") {
+      // Сканирование сетей
+      int n = WiFi.scanNetworks();
+      Serial.println("Найдено сетей: " + String(n));
+      sendStatus("scan:" + String(n));
+    } else if (command == "restart") {
+      ESP.restart();
+    } else if (command == "mode") {
+      // Переключение режима
+      if (hubMode) {
+        hubMode = false;
+      } else {
+        hubMode = true;
+      }
+      sendStatus("mode:" + String(hubMode ? "hub" : "client"));
+    }
+  }
+  
+  http.end();
+}
