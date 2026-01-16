@@ -1,0 +1,242 @@
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <ESP8266HTTPClient.h>
+
+// ========== НАСТРОЙКИ ==========
+const char* WIFI_SSID = "ВАШ_WIFI_SSID";
+const char* WIFI_PASS = "ВАШ_WIFI_PASSWORD";
+
+const char* SERVER_IP = "192.168.1.100";  // IP вашего ПК с сервером
+const int SERVER_PORT = 5000;
+
+const char* DEVICE_ID = "smart_lamp_001";
+const char* DEVICE_NAME = "Умная лампа";
+const char* DEVICE_TYPE = "light";
+
+const int LAMP_PIN = D1;  // GPIO5 (D1) для реле/лампы
+// ===============================
+
+WiFiClient client;
+HTTPClient http;
+bool lampState = false;
+unsigned long lastCheck = 0;
+const unsigned long CHECK_INTERVAL = 1000;  // Проверка команд каждую секунду
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("\n\n===== SMART LAMP ESP8266 =====");
+  
+  // Настройка пина лампы
+  pinMode(LAMP_PIN, OUTPUT);
+  digitalWrite(LAMP_PIN, LOW);  // Выключить лампу при старте
+  
+  // Подключение к WiFi
+  connectToWiFi();
+  
+  // Регистрация на сервере
+  registerDevice();
+  
+  Serial.println("Система готова к работе");
+  Serial.println("============================\n");
+}
+
+void loop() {
+  // Поддерживаем соединение с WiFi
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Потеряно WiFi соединение, переподключаемся...");
+    connectToWiFi();
+  }
+  
+  // Проверяем команды с сервера
+  if (millis() - lastCheck > CHECK_INTERVAL) {
+    checkForCommands();
+    lastCheck = millis();
+  }
+  
+  delay(10);
+}
+
+void connectToWiFi() {
+  Serial.print("Подключение к WiFi: ");
+  Serial.println(WIFI_SSID);
+  
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nWiFi подключен!");
+    Serial.print("IP адрес: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("MAC адрес: ");
+    Serial.println(WiFi.macAddress());
+  } else {
+    Serial.println("\nОшибка подключения к WiFi!");
+  }
+}
+
+void registerDevice() {
+  Serial.println("Регистрация устройства на сервере...");
+  
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/register";
+  
+  http.begin(client, serverURL);
+  http.addHeader("Content-Type", "application/json");
+  
+  // JSON данные для регистрации
+  String jsonData = "{";
+  jsonData += "\"id\":\"" + String(DEVICE_ID) + "\",";
+  jsonData += "\"name\":\"" + String(DEVICE_NAME) + "\",";
+  jsonData += "\"type\":\"" + String(DEVICE_TYPE) + "\",";
+  jsonData += "\"icon\":\"💡\",";
+  jsonData += "\"description\":\"Умная светодиодная лампа\",";
+  jsonData += "\"commands\":[\"on\",\"off\",\"toggle\"]";
+  jsonData += "}";
+  
+  int httpCode = http.POST(jsonData);
+  
+  if (httpCode > 0) {
+    Serial.print("Код ответа сервера: ");
+    Serial.println(httpCode);
+    
+    if (httpCode == HTTP_CODE_OK) {
+      String response = http.getString();
+      Serial.println("Регистрация успешна!");
+      Serial.println("Ответ сервера: " + response);
+      
+      // Сообщаем серверу текущий статус
+      sendStatus("off");
+    }
+  } else {
+    Serial.print("Ошибка регистрации: ");
+    Serial.println(http.errorToString(httpCode).c_str());
+  }
+  
+  http.end();
+}
+
+void checkForCommands() {
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/command/" + String(DEVICE_ID) + "/check";
+  
+  http.begin(client, serverURL);
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+    String command = http.getString();
+    command.trim();
+    
+    if (command.length() > 0) {
+      Serial.print("Получена команда: ");
+      Serial.println(command);
+      
+      processCommand(command);
+    }
+  } else if (httpCode < 0) {
+    // Ошибка соединения
+    Serial.print("Ошибка проверки команд: ");
+    Serial.println(http.errorToString(httpCode).c_str());
+  }
+  
+  http.end();
+}
+
+void processCommand(String command) {
+  if (command == "on") {
+    turnOn();
+  } else if (command == "off") {
+    turnOff();
+  } else if (command == "toggle") {
+    toggle();
+  }
+}
+
+void turnOn() {
+  digitalWrite(LAMP_PIN, HIGH);
+  lampState = true;
+  Serial.println("Лампа: ВКЛЮЧЕНО");
+  sendStatus("on");
+  
+  // Визуальная индикация на ESP
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(LED_BUILTIN, LOW);
+    delay(100);
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(100);
+  }
+}
+
+void turnOff() {
+  digitalWrite(LAMP_PIN, LOW);
+  lampState = false;
+  Serial.println("Лампа: ВЫКЛЮЧЕНО");
+  sendStatus("off");
+  
+  // Визуальная индикация на ESP
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(300);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(300);
+  digitalWrite(LED_BUILTIN, HIGH);
+}
+
+void toggle() {
+  lampState = !lampState;
+  digitalWrite(LAMP_PIN, lampState ? HIGH : LOW);
+  Serial.println("Лампа: " + String(lampState ? "ВКЛЮЧЕНО" : "ВЫКЛЮЧЕНО"));
+  sendStatus(lampState ? "on" : "off");
+  
+  // Мигание встроенным светодиодом
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    delay(50);
+  }
+  digitalWrite(LED_BUILTIN, HIGH);
+}
+
+void sendStatus(String status) {
+  String serverURL = "http://" + String(SERVER_IP) + ":" + String(SERVER_PORT) + "/update_status/" + String(DEVICE_ID) + "/" + status;
+  
+  http.begin(client, serverURL);
+  int httpCode = http.GET();
+  
+  if (httpCode == HTTP_CODE_OK) {
+    Serial.println("Статус отправлен на сервер: " + status);
+  }
+  
+  http.end();
+}
+
+// Функция для ручного тестирования через Serial
+void handleSerialCommands() {
+  if (Serial.available() > 0) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    
+    if (cmd == "on") turnOn();
+    else if (cmd == "off") turnOff();
+    else if (cmd == "toggle") toggle();
+    else if (cmd == "status") {
+      Serial.print("Текущее состояние: ");
+      Serial.println(lampState ? "ВКЛ" : "ВЫКЛ");
+      Serial.print("WiFi статус: ");
+      Serial.println(WiFi.status() == WL_CONNECTED ? "Подключен" : "Отключен");
+      Serial.print("IP: ");
+      Serial.println(WiFi.localIP());
+    }
+    else if (cmd == "help") {
+      Serial.println("Доступные команды:");
+      Serial.println("  on     - включить лампу");
+      Serial.println("  off    - выключить лампу");
+      Serial.println("  toggle - переключить");
+      Serial.println("  status - информация");
+      Serial.println("  help   - эта справка");
+    }
+  }
+}
